@@ -1,0 +1,17 @@
+/target
+/classes
+/checkouts
+pom.xml
+pom.xml.asc
+*.jar
+*.class
+/.lein-*
+/.nrepl-port
+.hgignore
+.hg/
+/.idea
+*.mv.db
+*.trace.db
+resources/
+test.db.mv.db
+test.db.trace.db

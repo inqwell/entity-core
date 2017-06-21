@@ -199,18 +199,26 @@
   "Process the fields of the entity definition into its prototype map."
   [fields]
   (loop [fields fields
-         proto {}]
+         proto {}
+         type-proto {}
+         field-names []]
     (if (seq fields)
       (let [[w x y z] fields]
         (cond
           (= '= y)                      ; field type = value
           (recur (drop 4 fields)
-                 (assoc proto (keyword w) (resolve-ref z)))
+                 (assoc proto (keyword w) (resolve-ref z))
+                 (assoc type-proto (keyword w) (resolve-ref x))
+                 (conj field-names w))
           :else
-          (recur (drop 2 fields)        ; field
-                 (assoc proto (keyword w) (resolve-ref x))
-                 )))
-      proto)))
+          (let [val (resolve-ref x)]
+            (recur (drop 2 fields)        ; field type|expr
+                   (assoc proto (keyword w) val)
+                   (assoc type-proto (keyword w) val)
+                   (conj field-names w)))))
+      {:proto proto
+       :field-names field-names
+       :type-proto type-proto})))
 
 (defn- ensure-fn
   [f]
@@ -270,31 +278,31 @@
   (do
     (if-not (and (keyword? ent-name) (namespace ent-name))
       (throw (ex-info "name must be name-spaced keyword" {:name ent-name})))
-    (if-not (and (vector? fields) (seq fields) (even? (count fields)))
-      (throw (ex-info "fields must be a vector of name/value pairs" {:fields fields})))
+    ;(if-not (and (vector? fields) (seq fields) (even? (count fields)))
+    ;  (throw (ex-info "fields must be a vector of name/value pairs" {:fields fields})))
     (if-not (and (vector? primary) (seq primary))
       (throw (ex-info "primary key not a vector or empty" {:primary primary})))
-    (let [field-defs# (partition 2 fields)
-          fields# (vec (map first field-defs#))
+    (let [proto-info# (fields-proto fields)
+          fields# (:field-names proto-info#)
           rec-name# (name ent-name)]
       (if-not (every? (set fields#) primary)
-        (throw (ex-info "primary fields not in declared fields" {:primary primary})))
-      (let [proto# (reduce #(assoc %1 (keyword (first %2))
-                                      (resolve-ref (second %2)))
-                           {}
-                           field-defs#)
+        (throw (ex-info "primary fields not in declared fields" {:primary primary
+                                                                 :fields fields#})))
+      (let [proto# (:proto proto-info#)
+            type-proto# (:type-proto proto-info#)
             extras# (parse-extras proto# primary more)]
         `(do
            (defrecord ~(symbol rec-name#) ~fields#)
            (swap! types assoc
                   ~ent-name
                   (with-meta
-                    {:name     ~ent-name
-                     :ctor     (eval (symbol (str "->" ~rec-name#))) ;ctor eg ->Currency
-                     :map-ctor (eval (symbol (str "map->" ~rec-name#))) ;from a map eg map->Currency
-                     :proto    ((resolve (symbol (str "map->" ~rec-name#))) ~proto#) ;exemplar
-                     :primary  (vec (map keyword '~primary))
-                     :extras   ~extras#}
+                    {:name       ~ent-name
+                     :ctor       (eval (symbol (str "->" ~rec-name#))) ;ctor eg ->Currency
+                     :map-ctor   (eval (symbol (str "map->" ~rec-name#))) ;from a map eg map->Currency
+                     :proto      ((resolve (symbol (str "map->" ~rec-name#))) ~proto#) ;exemplar
+                     :type-proto ~type-proto#
+                     :primary    (vec (map keyword '~primary))
+                     :extras     ~extras#}
                     {:type?   true}))
 
 
@@ -390,7 +398,7 @@
        (with-meta (into {}
                         (for [[c k v] (partition 3 [true :entity (:name entity)
                                                     key-name :key key-name
-                                                    (not key-name) :proto (:proto entity)
+                                                    (not key-name) :proto (:type-proto entity)
                                                     key-name :proto (and key-name (key-typed-proto entity key-name))])
                               :when c]
                           [k v]))))))
