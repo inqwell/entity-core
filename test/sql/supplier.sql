@@ -2,19 +2,19 @@
 
 -- :snip select-stmt
 SELECT
- F.Supplier       AS "Supplier",
+ S.Supplier       AS "Supplier",
 /*~
 (if (= (:server-type params) :h2)
- "F.Active"
- "F.Activo")
+ "S.Active"
+ "S.Activo")
 ~*/ AS "Active",
- F.Address1    AS "Address1",
- F.Address2    AS "Address2"
-FROM Supplier F
+ S.Address1    AS "Address1",
+ S.Address2    AS "Address2"
+FROM Supplier S
 
 -- :name primary :? :1
 :snip:select-stmt
-WHERE F.Supplier = :Supplier
+WHERE S.Supplier = :Supplier
 
 -- :name write :! :n
 MERGE INTO Supplier
@@ -22,7 +22,13 @@ VALUES (:Supplier, :Active, :Address1, :Address2)
 
 -- :name delete :! :n
 DELETE FROM Supplier
-WHERE F.Supplier = :Supplier
+WHERE Supplier = :Supplier
+
+-- :name by-fruit :? :*
+:snip:select-stmt
+, FruitSupplier FS
+WHERE S.Supplier = FS.Supplier
+AND FS.Fruit = :Fruit
 
 -- :name all :? :*
 :snip:select-stmt

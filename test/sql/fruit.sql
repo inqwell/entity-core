@@ -47,5 +47,11 @@ AND (F.Freezable = :Freezable OR :Freezable IS NULL)
 --AND (ShelfLife >= :MinShelfLife OR :MinShelfLife IS NULL)
 --AND (ShelfLife <= :MaxShelfLife OR :MaxShelfLife IS NULL)
 
+-- :name by-supplier :? :*
+:snip:select-stmt
+, FruitSupplier FS
+WHERE F.Fruit = FS.Fruit
+AND FS.Supplier = :Supplier
+
 -- :name all :? :*
 :snip:select-stmt

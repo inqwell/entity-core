@@ -25,6 +25,7 @@
 ; Scalar types
 (defscalar :foo/StringId "")
 (defscalar :foo/NumDays 0)
+(defscalar :foo/LongVal 0)
 (defscalar :foo/LongName "")
 (defscalar :foo/Money 0.00M)
 (defscalar :foo/Date now)
@@ -45,24 +46,37 @@
             Active         (enum-val :foo/Active :y)
             Freezable      (enum-val :foo/Freezable :n)]
            [Fruit]
-           :keys {:all          {:unique? false
-                                 :cached? false
-                                 :fields  []}
-                  :by-active {:unique? false
-                                 :cached? true
-                                 :fields  [Active]}
-                  :filter       {:unique? false
-                                 :cached? false
-                                 :fields  [Fruit
-                                           Active :as FruitActive
-                                           Freezable
-                                           ShelfLife :as MinShelfLife = 7
-                                           ShelfLife :as MaxShelfLife]}}
+           :keys {:all         {:unique? false
+                                :cached? false
+                                :fields  []}
+                  :by-active   {:unique? false
+                                :cached? true
+                                :fields  [Active]}
+                  :by-supplier {:unique? false
+                                :cached? false
+                                :fields  [:foo/Supplier.Supplier]}
+                  :filter      {:unique? false
+                                :cached? false
+                                :fields  [Fruit
+                                          Active :as FruitActive
+                                          Freezable
+                                          ShelfLife :as MinShelfLife = 7
+                                          ShelfLife :as MaxShelfLife]}}
            :io (sql/bind-connection *fruit-db* "sql/fruit.sql" fruit-db-opts)
            :create (fn [instance] (comment stuff))
            :mutate (fn [old new] (comment stuff))
            :join (fn [instance] (comment stuff))
-           :destroy (fn [instance] (comment stuff)))
+           :destroy (fn [instance] (comment stuff))
+           :alias :Fruit)
+
+(defentity :foo/Nutrition
+           [Fruit       :foo/StringId
+            KCalPer100g :foo/LongVal
+            Fat         :foo/LongVal
+            Salt        :foo/LongVal]
+           [Fruit]
+           :io (sql/bind-connection *fruit-db* "sql/nutrition.sql" fruit-db-opts)
+           :alias :Nutrition)
 
 (defentity :foo/FruitSupplier
            [Fruit       :foo/StringId
@@ -70,7 +84,10 @@
             PricePerKg  :foo/Money
             LastOrdered now]
            [Fruit Supplier]
-           :keys {:filter {:unique? false
+           :keys {:by-fruit {:unique? false
+                             :cached true
+                             :fields [Fruit]}
+                  :filter {:unique? false
                            :cached? false
                            :fields  [Fruit
                                      Supplier
@@ -92,7 +109,10 @@
             Address1    :foo/AddressLine
             Address2    :foo/AddressLine]
            [Supplier]
-           :keys {:all {:unique? false
+           :keys {:by-fruit {:unique? false
+                             :cached? false
+                             :fields [:foo/Fruit.Fruit]}
+                  :all {:unique? false
                         :cached? false
                         :fields  []}}
            :io (sql/bind-connection *fruit-db* "sql/supplier.sql" fruit-db-opts))
@@ -120,6 +140,27 @@
                   :ShelfLife   46
                   :Active      (enum-val :foo/Active :n)                            ; Out of season
                   :Freezable   (enum-val :foo/Freezable :n)}))
+
+(def strawberry-nutrition (new-instance
+                            :foo/Nutrition
+                            {:Fruit       "Strawberry"
+                             :KCalPer100g 40
+                             :Fat         0
+                             :Salt        0}))
+
+(def banana-nutrition (new-instance
+                        :foo/Nutrition
+                        {:Fruit       "Banana"
+                         :KCalPer100g 50
+                         :Fat         1
+                         :Salt        0}))
+
+(def pineapple-nutrition (new-instance
+                           :foo/Nutrition
+                           {:Fruit       "Pineapple"
+                            :KCalPer100g 45
+                            :Fat         0
+                            :Salt        1}))
 
 ; bad-apple is not an instance created with new-instance
 ; As such it's not writeable to the db.
@@ -189,6 +230,18 @@
         [:Active :int]
         [:Freezable "CHAR(1)"]])]))
 
+(defn create-nutrition-table []
+  (jdbc/db-do-commands
+    *fruit-db*
+    false
+    ["DROP TABLE Nutrition IF EXISTS;"
+     (jdbc/create-table-ddl
+       :Nutrition
+       [[:Fruit "VARCHAR(32)" "PRIMARY KEY"]
+        [:KCalPer100g :int]
+        [:Fat :int]
+        [:Salt :int]])]))
+
 (defn create-fruits-supplier-table []
   (jdbc/db-do-commands
     *fruit-db*
@@ -224,6 +277,12 @@
 (deftest read-correct-type
   (create-fruits-table)
   (write-instance strawberry)
+  (write-instance banana)
+  (write-instance pineapple)
+  (create-nutrition-table)
+  (write-instance strawberry-nutrition)
+  (write-instance banana-nutrition)
+  (write-instance pineapple-nutrition)
   (is (= Fruit
          (type (read-entity (make-key
                               :foo/Fruit
@@ -300,3 +359,32 @@
                          :FromDate       nil,
                          :ToDate         nil})))))))
 
+(deftest aggregate-primary-test
+  (create-fruits-table)
+  (create-nutrition-table)
+  (write-instance strawberry)
+  (write-instance banana)
+  (write-instance pineapple)
+  (write-instance strawberry-nutrition)
+  (write-instance banana-nutrition)
+  (write-instance pineapple-nutrition)
+
+  (is (= {:fruits [{:Fruit     strawberry
+                    :Nutrition strawberry-nutrition}
+                   {:Fruit    banana
+                    :Nutrition banana-nutrition}
+                   {:Fruit pineapple
+                    :Nutrition pineapple-nutrition}]}
+         (-> {}
+             (aggregate :to :foo/Fruit :key-val [:all {}] :set-name :fruits)
+             (aggregate :to :foo/Nutrition :from [:fruits > :Fruit])))))
+
+;(-> {}
+;    (aggregate :to :foo/Fruit :key-val {:Fruit "Strawberry"})
+;    (aggregate :to :foo/Supplier :from [:Fruit] :instance-name :Supplier :set-name :suppliers :key-val :by-fruit)
+;    (aggregate :to :foo/Nutrition :from [:Fruit])
+;    (aggregate :to :foo/Fruit :from [:suppliers > :Supplier] :key-val :by-supplier :set-name :fruits))
+;[:Fruit] :foo/Nutrition
+;[:suppliers > :Supplier] :fruits
+
+;[:suppliers ALL VAL (collect-one :Supplier) :fruits]

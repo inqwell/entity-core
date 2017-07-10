@@ -22,6 +22,10 @@ DELETE FROM FruitSupplier
 WHERE Fruit = :Fruit
 AND   Supplier = :Supplier
 
+-- :name by-fruit :? :*
+:snip:select-stmt
+WHERE FS.Fruit = :Fruit
+
 -- :name filter :? :*
 :snip:select-stmt
 , Fruit F,

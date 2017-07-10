@@ -5,7 +5,8 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [entity/entity-sql "0.1.1-SNAPSHOT"]
-                 [typeops "0.1.1"]]
+                 [typeops "0.1.1"]
+                 [com.rpl/specter "1.0.2"]]
   :plugins [[lein-codox "0.10.3"]]
   :profiles
   {:dev
