@@ -4,15 +4,8 @@
   entity.core
   (:require [clojure.string :as s]
             [typeops.assign :as t]
-            [com.rpl.specter :as sp]))
-
-(defprotocol IO
-  "Manage an entity in its persistence mechanism"
-  (read-key
-    [io key-val]
-    [io key-name key-val])
-  (write-val [io entity-val])
-  (delete-val [io entity-val]))
+            [com.rpl.specter :as sp]
+            [entity.protocol :refer [IO read-key write-val delete-val]]))
 
 (deftype ^:no-doc NullIO []
   IO
@@ -551,6 +544,16 @@
 (defn- key-value?
   "Returns the key name as truthy if the argument is a key value, that
   is, as returned from (make-key ...); false otherwise"
+  ([key-val] (key-value? key-val :key))
+  ([key-val meta-item]
+   (let [m (meta key-val)]
+     (if (every? #(contains? m %) [:entity :key :proto :unique?])
+       (meta-item m)
+       false))))
+
+(defn- unique-key?
+  "Returns the key name as truthy if the argument is a key value, that
+  is, as returned from (make-key ...); false otherwise"
   [key-val]
   (let [m (meta key-val)]
     (if (every? #(contains? m %) [:entity :key :proto])
@@ -581,20 +584,32 @@
                     as the value for the target type's :primary key, however
                     this behaviour is overridden by key-val, which may
                     be either the return value of make-key or a vector tuple
-                    of [key-name key-value] or a function (see below)
+                    of [key-name key-value], a keyword identifying a
+                    known key or a function (see below).
      :instance-name the map key to use when placing single instances in the
                     structure. This applies whether the key being applied
                     is unique or not. The name will be used in all
                     map children housing each instance.
      :set-name      the map key for the vector returned by non-unique keys
-                    when placed in the parent map."
+                    when placed in the parent map.
+     :transform-fn  A function to perform the transform. This must accept
+                    four arguments: [parent from f-opts cur] respectively
+                    the structure parent node, the instance being joined
+                    from, the options (see below) and any current
+                    value (likely nil unless the path identifies a
+                    pre-existing element in the structure). The returned
+                    value will be placed in the structure.
+  If key-val is a function it must accept three arguments. These are
+   - parent : the parent node in the structure
+   - from   : the value being aggregated from
+   - f-opts : a map containing :key <key-name>, :key-val,
+                               :entity <the type being joined>,
+                               :set-name and :instance-name"
   [data & opts]
   (let [{:keys [from to key-val instance-name set-name transform-fn]} opts
         to-entity (find-entity to)
         key-name (or (and (vector? key-val) (key-val 0))
-                     (key-value? (-> key-val
-                                     meta
-                                     :key))
+                     (key-value? key-val)
                      (and (keyword? key-val)
                           key-val)
                      :primary)
@@ -608,6 +623,7 @@
         set-name (if (true? set-name) nil set-name)
         path-len (count from)
         f-opts {:key key-name
+                :key-val key-val
                 :entity to
                 :set-name set-name
                 :instance-name instance-name}
@@ -692,13 +708,13 @@
               (make-key to key-name key-val)
 
               (fn? key-val)
-              (key-val from parent f-opts)
+              (key-val parent from f-opts)
               :else
               (throw (ex-info "Illegal arguments: " {:key-val key-val
                                                      :from    from
                                                      :target  to})))]
-            (if unique-key?
-              (read-entity to l-key-val)
+            (if (key-value? l-key-val :unique?)
+              (read-entity l-key-val)
               (into [] (map #(assoc {}
                                instance-name %)
-                            (read-entity to l-key-val))))))) data)))
+                            (read-entity l-key-val))))))) data)))

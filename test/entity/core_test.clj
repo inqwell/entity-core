@@ -379,12 +379,29 @@
              (aggregate :to :foo/Fruit :key-val [:all {}] :set-name :fruits)
              (aggregate :to :foo/Nutrition :from [:fruits > :Fruit])))))
 
-;(-> {}
-;    (aggregate :to :foo/Fruit :key-val {:Fruit "Strawberry"})
-;    (aggregate :to :foo/Supplier :from [:Fruit] :instance-name :Supplier :set-name :suppliers :key-val :by-fruit)
-;    (aggregate :to :foo/Nutrition :from [:Fruit])
-;    (aggregate :to :foo/Fruit :from [:suppliers > :Supplier] :key-val :by-supplier :set-name :fruits))
-;[:Fruit] :foo/Nutrition
-;[:suppliers > :Supplier] :fruits
+(def agg-result1 {:Fruit strawberry,
+                  :suppliers [{:Supplier kent-fruits,
+                               :fruits [strawberry]}
+                              {:Supplier sussex-fruits,
+                               :fruits [{:Fruit strawberry}
+                                        {:Fruit pineapple}]}],
+                  :Nutrition strawberry-nutrition})
 
-;[:suppliers ALL VAL (collect-one :Supplier) :fruits]
+(deftest aggregate-big-test
+  (is (do
+        (create-fruits-table)
+        (create-fruits-supplier-table)
+        (create-supplier-table)
+        (write-instance kent-fruits)
+        (write-instance sussex-fruits)
+        (write-instance strawberry)
+        (write-instance pineapple)
+        (write-instance banana)
+        (doall (map #(write-instance %1) fruit-supplier-mappings)))
+      (= agg-result1
+         (-> {}
+             (aggregate :to :foo/Fruit :key-val {:Fruit "Strawberry"})
+             (aggregate :to :foo/Supplier :from [:Fruit] :instance-name :Supplier :set-name :suppliers :key-val :by-fruit)
+             (aggregate :to :foo/Nutrition :from [:Fruit])
+             (aggregate :to :foo/Fruit :from [:suppliers > :Supplier] :key-val :by-supplier :set-name :fruits)))))
+
