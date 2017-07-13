@@ -120,19 +120,6 @@
     (or (sym enum)
         (throw (ex-info (str "Unknown enum symbol") {:sym sym})))))
 
-; name must be name-spaced
-; fields is a vector of symbols and evaluated values
-; primary is a vector of symbols all of which must be fields
-; keys is a map of keywords to key definition maps
-(deftype Entity
-  [name ctor map-ctor proto primary extras])
-
-;(defprotocol LifeCycle
-;  (create [entity])
-;  (join [entity])
-;  (mutate [old-entity new-entity])
-;  (destroy [entity]))
-
 (defn- field-info
   "Processes a field name, which looks at most like :ns/Type.Field,
   returning a map containing the :name and
@@ -456,8 +443,8 @@
 
 (defn get-alias
   "Return a keyword that can be used to associate the
-  instance in a map. This will be either its name or
-  any alias that was specified when defined."
+  instance in a map. This will be either its unqualified
+  name or any alias that was specified when defined."
   [instance]
   (let [entity (cond
                  (keyword? instance) (find-entity instance)
@@ -466,7 +453,10 @@
     (or (-> entity
             :extras
             :alias)
-        (:name entity))))
+        (-> entity
+            :name
+            name
+            keyword))))
 
 (defn new-instance
   "Make an instance of the specified type, setting any fields
@@ -560,6 +550,22 @@
       (:key m)
       false)))
 
+(defn merge-primary
+  "Merge the given sequences of instances by their primary key"
+  [instance-name current to-add]
+  (let [as-map-f (fn [x] (reduce #(assoc %1
+                                    (or (-> %2
+                                            instance-name
+                                            meta
+                                            :primary)
+                                        (throw (ex-info "Primary key unavailable" {})))
+                                    %2)
+                                 {}
+                       x))
+        cur-m (as-map-f current)
+        add-m (as-map-f to-add)]
+    (into [] (vals (merge add-m cur-m)))))
+
 (defn aggregate
   "Aggregate from a (possibly empty) data structure to the
   target entity reference. Provides for the common cases of
@@ -592,6 +598,18 @@
                     map children housing each instance.
      :set-name      the map key for the vector returned by non-unique keys
                     when placed in the parent map.
+     :merge         Any existing value will always be replaced by a new one.
+                    In the case of a non-unique key, an existing vector
+                    will be replaced unless this option specifies
+                    either :primary or a function. The option of :primary
+                    will merge current and new values into the result
+                    vector by the primary key set. A function must accept
+                    three arguments, the instance-name, current and new
+                    vectors, and return a vector containing the required merge.
+     :must-join     If true, when aggregating to a vector, the map child will
+                    be removed for any instances that don't join with the
+                    target. Otherwise the vector entry remains with a
+                    nil child where there is no join.
      :transform-fn  A function to perform the transform. This must accept
                     four arguments: [parent from f-opts cur] respectively
                     the structure parent node, the instance being joined
@@ -606,7 +624,14 @@
                                :entity <the type being joined>,
                                :set-name and :instance-name"
   [data & opts]
-  (let [{:keys [from to key-val instance-name set-name transform-fn]} opts
+  (let [{:keys [from
+                to
+                key-val
+                instance-name
+                set-name
+                transform-fn
+                merge
+                must-join]} opts
         to-entity (find-entity to)
         key-name (or (and (vector? key-val) (key-val 0))
                      (key-value? key-val)
@@ -619,19 +644,19 @@
         set-name (or set-name unique-key? (throw
                                             (ex-info "non-unique key requires a set-name"
                                                      {:entity (:name to-entity)
-                                                      :key key-name})))
+                                                      :key    key-name})))
         set-name (if (true? set-name) nil set-name)
         path-len (count from)
-        f-opts {:key key-name
-                :key-val key-val
-                :entity to
-                :set-name set-name
+        f-opts {:key           key-name
+                :key-val       key-val
+                :entity        to
+                :set-name      set-name
                 :instance-name instance-name}
         from (or (and (vector? from)
                       (>= path-len 3)
                       (loop [from from
-                             cur  (first from)
-                             idx  0
+                             cur (first from)
+                             idx 0
                              last-vec (- path-len 2)
                              last-elem (+ last-vec 1)
                              result []]
@@ -644,18 +669,18 @@
                                    (inc idx)
                                    last-vec
                                    last-elem
-                                   (concat result [sp/ALL sp/VAL]))
+                                   (vec (concat result [sp/ALL sp/VAL])))
                             (= idx last-elem)
                             (recur (rest from)
                                    (second from)
                                    (inc idx)
                                    last-vec
                                    last-elem
-                                   (concat result [(sp/collect-one cur)
-                                                   (sp/putval f-opts)
-                                                   (if unique-key?
-                                                     instance-name
-                                                     set-name)]))
+                                   (vec (concat result [(sp/collect-one cur)
+                                                        (sp/putval f-opts)
+                                                        (if unique-key?
+                                                          instance-name
+                                                          set-name)])))
                             :else
                             (recur (rest from)
                                    (second from)
@@ -665,56 +690,66 @@
                                    (conj result cur)))
                           result)))
                  (and (= path-len 0)
-                      [(sp/putval nil) ; parent
-                       (sp/putval nil) ; from
+                      [(sp/putval nil)                      ; parent
+                       (sp/putval nil)                      ; from
                        (sp/putval f-opts)
                        (if unique-key?
                          instance-name
                          set-name)])
                  (and (vector? from)
                       (= path-len 1)
-                      [sp/VAL                    ; parent
-                       (sp/collect-one (from 0)) ; from
+                      [sp/VAL                               ; parent
+                       (sp/collect-one (from 0))            ; from
                        (sp/putval f-opts)
                        (if unique-key?
                          instance-name
                          set-name)])
                  (throw (ex-info "Illegal 'from' argument" {:arg from})))]
-    (sp/transform
+    (cond->>
+      (sp/transform
       from
       (if transform-fn
         transform-fn
         (fn [parent from f-opts cur]
           (let [l-key-val
-            (cond
-              (nil? key-val)
-              (make-key to :primary from)
+                (cond
+                  (nil? key-val)
+                  (make-key to :primary from)
 
-              (keyword? key-val)
-              (make-key to key-val from)
+                  (keyword? key-val)
+                  (make-key to key-val from)
 
-              (vector? key-val)
-              (let [[key-name key-val] key-val]
-                (make-key to key-name key-val))
+                  (vector? key-val)
+                  (let [[key-name key-val] key-val]
+                    (make-key to key-name key-val))
 
-              (key-value? key-val)
-              (let [key-meta (meta key-val)]
-                (if (= to
-                       (:entity key-meta))
-                  key-val
-                  (make-key to key-name key-val)))
+                  (key-value? key-val)
+                  (let [key-meta (meta key-val)]
+                    (if (= to
+                           (:entity key-meta))
+                      key-val
+                      (make-key to key-name key-val)))
 
-              (map? key-val)
-              (make-key to key-name key-val)
+                  (map? key-val)
+                  (make-key to key-name key-val)
 
-              (fn? key-val)
-              (key-val parent from f-opts)
-              :else
-              (throw (ex-info "Illegal arguments: " {:key-val key-val
-                                                     :from    from
-                                                     :target  to})))]
+                  (fn? key-val)
+                  (key-val parent from f-opts)
+                  :else
+                  (throw (ex-info "Illegal arguments: " {:key-val key-val
+                                                         :from    from
+                                                         :target  to})))]
             (if (key-value? l-key-val :unique?)
               (read-entity l-key-val)
-              (into [] (map #(assoc {}
-                               instance-name %)
-                            (read-entity l-key-val))))))) data)))
+              (let [result (into [] (map #(assoc {}
+                                            instance-name %)
+                                         (read-entity l-key-val)))]
+                (cond
+                  (nil? merge) result
+                  (= :primary merge) (merge-primary instance-name cur result)
+                  (fn? merge) (merge instance-name cur result)
+                  :else (throw (ex-info "Illegal merge-fn" {:arg merge})))
+                ))))) data)
+      must-join
+      (sp/setval (assoc from (dec (count from)) #(nil? (instance-name %))) sp/NONE))))
+
