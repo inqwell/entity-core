@@ -610,13 +610,8 @@
                     be removed for any instances that don't join with the
                     target. Otherwise the vector entry remains with a
                     nil child where there is no join.
-     :transform-fn  A function to perform the transform. This must accept
-                    four arguments: [parent from f-opts cur] respectively
-                    the structure parent node, the instance being joined
-                    from, the options (see below) and any current
-                    value (likely nil unless the path identifies a
-                    pre-existing element in the structure). The returned
-                    value will be placed in the structure.
+     :for-each      A function called after the aggregation. Will be passed
+                    the parent node
   If key-val is a function it must accept three arguments. These are
    - parent : the parent node in the structure
    - from   : the value being aggregated from
@@ -624,12 +619,13 @@
                                :entity <the type being joined>,
                                :set-name and :instance-name"
   [data & opts]
+  (or (map? data) (throw (ex-info "data must be a map" {})))
   (let [{:keys [from
                 to
                 key-val
                 instance-name
                 set-name
-                transform-fn
+                for-each
                 merge
                 must-join]} opts
         to-entity (find-entity to)
@@ -652,7 +648,7 @@
                 :entity        to
                 :set-name      set-name
                 :instance-name instance-name}
-        from (or (and (vector? from)
+        path (or (and (vector? from)
                       (>= path-len 3)
                       (loop [from from
                              cur (first from)
@@ -689,7 +685,7 @@
                                    last-elem
                                    (conj result cur)))
                           result)))
-                 (and (= path-len 0)
+                 (and (nil? from)
                       [(sp/putval nil)                      ; parent
                        (sp/putval nil)                      ; from
                        (sp/putval f-opts)
@@ -707,9 +703,7 @@
                  (throw (ex-info "Illegal 'from' argument" {:arg from})))]
     (cond->>
       (sp/transform
-      from
-      (if transform-fn
-        transform-fn
+        path
         (fn [parent from f-opts cur]
           (let [l-key-val
                 (cond
@@ -749,7 +743,23 @@
                   (= :primary merge) (merge-primary instance-name cur result)
                   (fn? merge) (merge instance-name cur result)
                   :else (throw (ex-info "Illegal merge-fn" {:arg merge})))
-                ))))) data)
+                ))))
+        data)
       must-join
-      (sp/setval (assoc from (dec (count from)) #(nil? (instance-name %))) sp/NONE))))
+      (sp/setval
+        (assoc path
+          (dec (count path))
+          #(nil? (instance-name %)))
+        sp/NONE)
+      for-each
+      (sp/transform
+        (cond
+          (nil? from)
+          [(last path) sp/ALL]
 
+          (= path-len 1)
+          []
+
+          :else
+          (sp/setval [sp/ALL #(= > %)] sp/ALL (pop from)))
+        for-each))))

@@ -421,7 +421,7 @@
                        (aggregate :set-name :fruits :to :foo/Fruit :key-val (make-key :foo/Fruit :filter {}))
                        (aggregate :from [:fruits > :Fruit] :to :foo/Nutrition :must-join true)))))
 
-(deftest aggregate-merge-test
+(deftest aggregate-merge-extra-test
   (is (do
         (create-fruits-table)
         (create-fruits-supplier-table)
@@ -449,5 +449,21 @@
                                                    :Freezable "N"}}]}
          (-> {}
              (aggregate :set-name :fruits :to :foo/Fruit :key-val (make-key :foo/Fruit :filter {:FruitActive 0}))
-             (aggregate :merge-fn :primary :set-name :fruits :to :foo/Fruit :key-val (make-key :foo/Fruit :filter {:FruitActive 1}))))))
+             (aggregate :merge-fn :primary :set-name :fruits :to :foo/Fruit :key-val (make-key :foo/Fruit :filter {:FruitActive 1})))))
+  (is (= {:Fruit strawberry,
+         :suppliers [{:Supplier kent-fruits,
+                      :fruits [{:Fruit strawberry}],
+                      :extra "hello"}
+                     {:Supplier sussex-fruits,
+                      :fruits [{:Fruit strawberry}
+                               {:Fruit pineapple}],
+                      :extra "hello"}],
+         :Nutrition strawberry-nutrition,
+         :extra "foo"})
+      (-> {}
+          (aggregate :to :foo/Fruit :key-val {:Fruit "Strawberry"})
+          (aggregate :to :foo/Supplier :from [:Fruit] :instance-name :Supplier :set-name :suppliers :key-val :by-fruit)
+          (aggregate :to :foo/Nutrition :from [:Fruit] :for-each (fn bar [v] (assoc v :extra "foo")))
+          (aggregate :to :foo/Fruit :for-each (fn foo [v] (assoc v :extra "hello")) :from [:suppliers > :Supplier] :key-val :by-supplier :set-name :fruits))))
+
 
