@@ -1,6 +1,7 @@
 (ns entity.core-test
   (:require [clojure.test :refer :all]
             [entity.core :refer :all]
+            [entity.aggregate :refer [aggregate]]
             [entity.sql.hug :as sql]
             [typeops.assign :as typeops]
             [clojure.java.io :as io]
@@ -380,19 +381,18 @@
              (aggregate :to :foo/Nutrition :from [:fruits > :Fruit])))))
 
 (deftest aggregate-big-test
-  (is (do
-        (create-fruits-table)
-        (create-fruits-supplier-table)
-        (create-supplier-table)
-        (write-instance kent-fruits)
-        (write-instance sussex-fruits)
-        (write-instance strawberry)
-        (write-instance pineapple)
-        (write-instance banana)
-        (doall (map #(write-instance %1) fruit-supplier-mappings)))
-      (= {:Fruit strawberry,
+  (create-fruits-table)
+  (create-fruits-supplier-table)
+  (create-supplier-table)
+  (write-instance kent-fruits)
+  (write-instance sussex-fruits)
+  (write-instance strawberry)
+  (write-instance pineapple)
+  (write-instance banana)
+  (doall (map #(write-instance %1) fruit-supplier-mappings))
+  (is (= {:Fruit strawberry,
           :suppliers [{:Supplier kent-fruits,
-                       :fruits [strawberry]}
+                       :fruits [{:Fruit strawberry}]}
                       {:Supplier sussex-fruits,
                        :fruits [{:Fruit strawberry}
                                 {:Fruit pineapple}]}],
@@ -404,16 +404,15 @@
              (aggregate :to :foo/Fruit :from [:suppliers > :Supplier] :key-val :by-supplier :set-name :fruits)))))
 
 (deftest aggregate-must-join-test
-  (is (do
-        (create-fruits-table)
-        (create-nutrition-table)
-        (write-instance strawberry)
-        (write-instance pineapple)
-        (write-instance banana)
-        (write-instance strawberry-nutrition)
-        (write-instance banana-nutrition)
-        (doall (map #(write-instance %1) fruit-supplier-mappings)))
-      (= {:fruits [{:Fruit strawberry,
+  (create-fruits-table)
+  (create-nutrition-table)
+  (write-instance strawberry)
+  (write-instance pineapple)
+  (write-instance banana)
+  (write-instance strawberry-nutrition)
+  (write-instance banana-nutrition)
+  (doall (map #(write-instance %1) fruit-supplier-mappings))
+  (is (= {:fruits [{:Fruit strawberry,
                     :Nutrition strawberry-nutrition}
                    {:Fruit banana,
                     :Nutrition banana-nutrition}]}
@@ -422,34 +421,23 @@
                        (aggregate :from [:fruits > :Fruit] :to :foo/Nutrition :must-join true)))))
 
 (deftest aggregate-merge-extra-test
-  (is (do
-        (create-fruits-table)
-        (create-fruits-supplier-table)
-        (create-supplier-table)
-        (write-instance kent-fruits)
-        (write-instance sussex-fruits)
-        (write-instance strawberry)
-        (write-instance pineapple)
-        (write-instance banana)
-        (doall (map #(write-instance %1) fruit-supplier-mappings)))
-      (= {:fruits [{:Fruit #entity.core_test.Fruit{:Fruit "Strawberry",
-                                                   :Description "Soft Summer Fruit",
-                                                   :ShelfLife 14,
-                                                   :Active 1,
-                                                   :Freezable "Y"}}
-                   {:Fruit #entity.core_test.Fruit{:Fruit "Banana",
-                                                   :Description "Yellow and not straight",
-                                                   :ShelfLife 21,
-                                                   :Active 1,
-                                                   :Freezable "N"}}
-                   {:Fruit #entity.core_test.Fruit{:Fruit "Pineapple",
-                                                   :Description "Edible Bromeliad",
-                                                   :ShelfLife 46,
-                                                   :Active 0,
-                                                   :Freezable "N"}}]}
+  (create-fruits-table)
+  (create-fruits-supplier-table)
+  (create-supplier-table)
+  (write-instance kent-fruits)
+  (write-instance sussex-fruits)
+  (write-instance strawberry)
+  (write-instance pineapple)
+  (write-instance banana)
+  (doall (map #(write-instance %1) fruit-supplier-mappings))
+  (is (= {:fruits [{:Fruit strawberry}
+                   {:Fruit banana}
+                   {:Fruit pineapple}
+                   ]}
          (-> {}
              (aggregate :set-name :fruits :to :foo/Fruit :key-val (make-key :foo/Fruit :filter {:FruitActive 0}))
-             (aggregate :merge-fn :primary :set-name :fruits :to :foo/Fruit :key-val (make-key :foo/Fruit :filter {:FruitActive 1})))))
+             (aggregate :merge :primary :set-name :fruits :to :foo/Fruit :key-val (make-key :foo/Fruit :filter {:FruitActive 1}))
+             )))
   (is (= {:Fruit strawberry,
          :suppliers [{:Supplier kent-fruits,
                       :fruits [{:Fruit strawberry}],
