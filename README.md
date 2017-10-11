@@ -218,27 +218,27 @@ entity model that express the relationships required by whatever part of the
 processing model you are currently concerned with.
 
 opts are as follows:
--     **:from** `<path>`   a vector path to the thing being aggregated from.
+-     `:from path`   a vector path to the thing being aggregated from.
                     This is only absent when seeding the structure
                     with its initial value (or vector of values, in the
                     case of a non-unique key). When passing through
                     a vector in the structure indicate this using `>`
--     **:to** `<type-ref>` mandatory - the type being joined in the structure.
--     **:key-val**       when **:from** is present, by default it will be used
+-     `:to type-ref` mandatory - the type being joined in the structure.
+-     `:key-val`       when `:from` is present, by default it will be used
                     as the value for the target type's `:primary` key, however
                     this behaviour is overridden by key-val, which may
                     be either the return value of make-key or a vector tuple
                     of `[key-name key-value]`, a keyword identifying a
                     known key or a function (see below).
--     **:instance-name** the map key to use when placing single instances in the
+-     `:instance-name` the map key to use when placing single instances in the
                     structure. This applies whether the key being applied
                     is unique or not. The name will be used in all
                     map children housing each instance. Optional and if
                     absent the unqualified name or any alias is used.
--     **:set-name**      the map key for the vector returned by non-unique keys
+-     `:set-name`      the map key for the vector returned by non-unique keys
                     when placed in the parent map. Mandatory when a non-unique
                     key is being used, otherwise ignored.
--     **:merge**         Any existing value will always be replaced by a new one.
+-     `:merge`         Any existing value will always be replaced by a new one.
                     In the case of a non-unique key, an existing vector
                     will be replaced unless this option specifies
                     either `:primary` or a function. The option of `:primary`
@@ -246,11 +246,11 @@ opts are as follows:
                     vector by the primary key set. A function must accept
                     three arguments, the instance-name, current and new
                     vectors, and return a vector containing the required merge.
--     **:must-join**     If true, when aggregating to a vector, the map child will
+-     `:must-join`     If true, when aggregating to a vector, the map child will
                     be removed for any instances that don't join with the
                     target. Otherwise the vector entry remains with a
                     nil child where there is no join.
--     **:for-each**      A function called after the aggregation. Will be passed
+-     `:for-each`      A function called after the aggregation. Will be passed
                     the parent node and must return the new child.
 
 ## I/O Mechanisms
