@@ -450,8 +450,19 @@
          :extra "foo"})
       (-> {}
           (aggregate :to :foo/Fruit :key-val {:Fruit "Strawberry"})
-          (aggregate :to :foo/Supplier :from [:Fruit] :instance-name :Supplier :set-name :suppliers :key-val :by-fruit)
-          (aggregate :to :foo/Nutrition :from [:Fruit] :for-each (fn bar [v] (assoc v :extra "foo")))
-          (aggregate :to :foo/Fruit :for-each (fn foo [v] (assoc v :extra "hello")) :from [:suppliers > :Supplier] :key-val :by-supplier :set-name :fruits))))
+          (aggregate :to :foo/Supplier
+                     :from [:Fruit]
+                     :instance-name
+                     :Supplier
+                     :set-name :suppliers
+                     :key-val :by-fruit)
+          (aggregate :to :foo/Nutrition
+                     :from [:Fruit]
+                     :for-each (fn bar [v] (assoc v :extra "foo")))
+          (aggregate :to :foo/Fruit
+                     :for-each (fn foo [v] (assoc v :extra "hello"))
+                     :from [:suppliers > :Supplier]
+                     :key-val :by-supplier
+                     :set-name :fruits))))
 
 

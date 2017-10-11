@@ -27,7 +27,7 @@ are supported.
 ```
 
 ## Define Enums
-Enums define keyword to value mappings and a default value (presently mandatory)
+Enums define keyword to value mappings and a default value
 ```clojure
 (defenum :foo/Freezable {:y "Y"
                          :n "N"} :y)
@@ -142,7 +142,7 @@ with other domain data types should be expressed by associating related
 instance(s) via their position in a dynamically constructed data graph.
 
 By default, key field values are nil. `typeops` is used to enforce
-the correct types for field values set using `assign`.
+the correct types for field values set its definition of `assoc`.
 ```clojure
 (make-key
     :foo/FruitSupplier
@@ -170,6 +170,88 @@ Key fields can be defined with a default value other than `nil`:
    foo/Supplier.Active :as SupplierActive = (enum-val :foo/Active :y)
      .
 ```
+
+## The Mighty (aggregate)
+In any data model there are many relationships between the various entities.
+When defining a part of the processing model, a subset of those relationships
+will be navigated to build an appropriate structure, expressing them by the
+relative positions of the instances:
+- siblings in a map: 1-to-1
+- nested vector: 1-to-many
+
+Consider the following example
+
+![Runtime Structure](doc/aggregate.png "Relationship Structure")
+
+The second-level maps allow relationships to be expressed at that level, an so on
+deeper into the structure.
+
+This structure can be built using `aggregate` like this:
+```clojure
+      (-> {}
+          (aggregate :to :foo/Fruit :key-val {:Fruit "Strawberry"})
+          (aggregate :to :foo/Supplier
+                     :from [:Fruit]
+                     :instance-name
+                     :Supplier
+                     :set-name :suppliers
+                     :key-val :by-fruit)
+          (aggregate :to :foo/Nutrition
+                     :from [:Fruit]
+                     :for-each (fn bar [v] (assoc v :extra "foo")))
+          (aggregate :to :foo/Fruit
+                     :for-each (fn foo [v] (assoc v :extra "hello"))
+                     :from [:suppliers > :Supplier]
+                     :key-val :by-supplier
+                     :set-name :fruits))))
+```
+This is saying
+- starting at the `:Fruit` Strawberry
+- aggregate all the suppliers of Strawberry
+- add in also Strawberry's associated `:Nutrition` info and at the same time
+the additional thing `"foo"`
+- aggregate each `:Supplier`'s inventory of `:Fruit`s and at the same time the
+additional thing `"hello"`
+
+The `(aggregate data & opts)` function is the way to build data graphs from your
+entity model that express the relationships required by whatever part of the
+processing model you are currently concerned with.
+
+opts are as follows:
+-     **:from** `<path>`   a vector path to the thing being aggregated from.
+                    This is only absent when seeding the structure
+                    with its initial value (or vector of values, in the
+                    case of a non-unique key). When passing through
+                    a vector in the structure indicate this using `>`
+-     **:to** `<type-ref>` mandatory - the type being joined in the structure.
+-     **:key-val**       when **:from** is present, by default it will be used
+                    as the value for the target type's `:primary` key, however
+                    this behaviour is overridden by key-val, which may
+                    be either the return value of make-key or a vector tuple
+                    of `[key-name key-value]`, a keyword identifying a
+                    known key or a function (see below).
+-     **:instance-name** the map key to use when placing single instances in the
+                    structure. This applies whether the key being applied
+                    is unique or not. The name will be used in all
+                    map children housing each instance. Optional and if
+                    absent the unqualified name or any alias is used.
+-     **:set-name**      the map key for the vector returned by non-unique keys
+                    when placed in the parent map. Mandatory when a non-unique
+                    key is being used, otherwise ignored.
+-     **:merge**         Any existing value will always be replaced by a new one.
+                    In the case of a non-unique key, an existing vector
+                    will be replaced unless this option specifies
+                    either `:primary` or a function. The option of `:primary`
+                    will merge current and new values into the result
+                    vector by the primary key set. A function must accept
+                    three arguments, the instance-name, current and new
+                    vectors, and return a vector containing the required merge.
+-     **:must-join**     If true, when aggregating to a vector, the map child will
+                    be removed for any instances that don't join with the
+                    target. Otherwise the vector entry remains with a
+                    nil child where there is no join.
+-     **:for-each**      A function called after the aggregation. Will be passed
+                    the parent node and must return the new child.
 
 ## I/O Mechanisms
 The `entity-sql` library implements `core`'s `IO` protocol and provides
