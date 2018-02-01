@@ -269,7 +269,7 @@ the `bind-connection` macro to bind entities to SQL databases.
 
 Not presently hosted. Use `lein install` to place in your local maven
 repo for now and use the version found in `project.clj` for your
-dependency.
+dependency.`
 
 ## License
 

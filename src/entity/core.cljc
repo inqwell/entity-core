@@ -401,7 +401,8 @@
           type-proto))))
 
 (defn- apply-meta
-  "Carry type information in the meta data"
+  "Carry type information in the meta data of a key value
+  or instance."
   ([instance entity] (apply-meta instance entity nil))
   ([instance entity key-name]
    (-> instance
@@ -414,6 +415,21 @@
                                                                                       :unique?))])
                               :when c]
                           [k v]))))))
+
+; TODO: consider find-entity viability
+(defn- get-entity-def
+  [instance]
+  (cond
+    (keyword? instance) (find-entity instance)
+    (and (:type? (meta instance)) (:proto instance)) instance
+    :else (find-entity (:entity (meta instance)))))
+
+(defn is-key-val
+  "Returns true if the argument appears to be a value returned
+  by make-key"
+  [val]
+  (let [{:keys [entity key-name proto]} (meta val)]
+    (and entity key-name proto true)))
 
 (defn make-key
   "Make a key value. Returns a map comprising only the map keys
@@ -433,7 +449,7 @@
         (apply-meta entity key-name)
         (#?(:clj t/merge :cljs merge) key-val))))
 
-(defn- primary-key-to-meta
+(defn primary-key-to-meta
   "Augment the instance meta data with the primary key.
   This can only be done when the primary key is established,
   but it is trusted this is so"
@@ -453,10 +469,7 @@
   instance in a map. This will be either its unqualified
   name or any alias that was specified when defined."
   [instance]
-  (let [entity (cond
-                 (keyword? instance) (find-entity instance)
-                 (and (:type? (meta instance)) (:proto instance)) instance
-                 :else (find-entity (:entity (meta instance))))]
+  (let [entity (get-entity-def instance)]
     (or (-> entity
             :extras
             :alias)
@@ -464,6 +477,30 @@
             :name
             name
             keyword))))
+
+(defn get-create-fn
+  "Return the function that can be called to correctly initialise this
+  and anything other required in the domain."
+  [instance]
+  (-> (get-entity-def instance)
+      :extras
+      :create))
+
+(defn get-mutate-fn
+  "Return the function that can be called to verify what changes are
+   allowed and perform any consequential actions in the domain."
+  [instance]
+  (-> (get-entity-def instance)
+      :extras
+      :mutate))
+
+(defn get-destroy-fn
+  "Return the function that can be called to destroy this
+  and anything else required in the domain."
+  [instance]
+  (-> (get-entity-def instance)
+      :extras
+      :destroy))
 
 (defn new-instance
   "Make an instance of the specified type, setting any fields
@@ -476,29 +513,36 @@
          ent-val (select-keys ent-val (keys proto))]
      (-> proto
          (apply-meta entity)
-         (#?(:clj t/merge :cljs merge) ent-val)))))
+         (#?(:clj t/merge
+             :cljs merge) ent-val)))))
 
 (defn get-primary-key
   "Return the instance's primary key from its meta data.
-  If not found, throws"
+  If not found, throws, if identifiable as the primary key
+  itself then returns the argument"
   [instance]
   (or (-> instance
           meta
           :primary)
+      (and (-> instance
+               meta
+               :key
+               (= :primary))
+           instance)
       (throw (ex-info (str "Primary key not set") {:instance instance
                                                    :meta     (meta instance)}))))
 (defn read-entity
   "Read the given entity, applying the key value"
   ([key-val]
    (let [key-meta (meta key-val)]
-     (read-entity (:entity key-meta) (:key key-meta) key-val)))
+     (read-entity key-val (:entity key-meta) (:key key-meta))))
   ([entity-name key-val]
-   (read-entity entity-name
+   (read-entity key-val
+                entity-name
                 (-> key-val
                     meta
-                    :key)
-                key-val))
-  ([entity-name key-name key-val]
+                    :key)))
+  ([key-val entity-name key-name]
    (if-not (and entity-name key-name key-val)
      (throw (ex-info "entity-name, key-name and value cannot be null" {})))
    (if-let [entity (find-entity entity-name)]

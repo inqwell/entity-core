@@ -268,6 +268,10 @@
         [:Address1 "VARCHAR(32)"]
         [:Address2 "VARCHAR(32)"]])]))
 
+;(deftest get-primary-fields-test
+;  (testing "primary fields"
+;    (is (= #{:Fruit :Supplier} (get-primary-fields :foo/FruitSupplier)))))
+
 (deftest write
   (create-fruits-table)
   (testing "write two instances"

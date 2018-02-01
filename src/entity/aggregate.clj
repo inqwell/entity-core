@@ -1,10 +1,12 @@
 (ns entity.aggregate
   (:require [com.rpl.specter :as sp]
-            [entity.core :refer [find-entity get-alias get-key-info make-key read-entity]]))
+            [entity.core :refer [find-entity get-alias get-key-info make-key read-entity]]
+            [entity.protocol :refer [read-fn]]))
 
 (defn- key-value?
-  "Returns the key name as truthy if the argument is a key value, that
-  is, as returned from (make-key ...); false otherwise"
+  "Returns the key name or other metadata marker as truthy if the
+  argument is a key value, that is, as returned from (make-key ...)
+  false otherwise"
   ([key-val] (key-value? key-val :key))
   ([key-val meta-item]
    (let [m (meta key-val)]
@@ -36,6 +38,10 @@
         cur-m (as-map-f current)
         add-m (as-map-f to-add)]
     (into [] (vals (merge add-m cur-m)))))
+
+(defmethod read-fn :default
+  [_ key-val & args]
+  (apply read-entity key-val args))
 
 (defn aggregate
   "Aggregate from a (possibly empty) data structure to the
@@ -100,7 +106,8 @@
                 set-name
                 for-each
                 merge
-                must-join]} opts
+                must-join
+                read-f]} opts
         to-entity (find-entity to)
         key-name (or (and (vector? key-val) (key-val 0))
                      (key-value? key-val)
@@ -207,10 +214,10 @@
                                                          :from    from
                                                          :target  to})))]
             (if (key-value? l-key-val :unique?)
-              (read-entity l-key-val)
+              (read-fn read-f l-key-val)
               (let [result (into [] (map #(assoc {}
                                             instance-name %)
-                                         (read-entity l-key-val)))]
+                                         (read-fn read-f l-key-val)))]
                 (cond
                   (nil? merge) result
                   (= :primary merge) (merge-primary instance-name cur result)
