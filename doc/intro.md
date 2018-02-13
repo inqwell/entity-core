@@ -1,3 +1,17 @@
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+**Table of Contents**  *generated with [DocToc](https://github.com/thlorenz/doctoc)*
+
+- [entity-core](#entity-core)
+    - [Define Scalars](#define-scalars)
+    - [Define Enums](#define-enums)
+    - [Define Entities](#define-entities)
+    - [Defining Keys](#defining-keys)
+    - [The Mighty (aggregate)](#the-mighty-aggregate)
+    - [I/O Mechanisms](#io-mechanisms)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
+
 # entity-core
 
 A Clojure library for defining domain types, their keys and persistence
