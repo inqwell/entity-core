@@ -91,6 +91,8 @@
                     nil child where there is no join.
      :for-each      A function called after the aggregation. Will be passed
                     the parent node
+     :read-f        The dispatching value for the read-fn multimethod. By default
+                    entity.core/read-entity will be called,
   If key-val is a function it must accept three arguments. These are
    - parent : the parent node in the structure
    - from   : the value being aggregated from

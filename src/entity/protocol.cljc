@@ -6,8 +6,7 @@
     [io key-val]
     [io key-name key-val])
   (write-val [io entity-val])
-  (delete-val [io entity-val])
-  (as-transaction [f]))
+  (delete-val [io entity-val]))
 
 (defmulti read-fn
           "Read instances from their persistent store"

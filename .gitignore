@@ -15,3 +15,5 @@ pom.xml.asc
 resources/
 test.db.mv.db
 test.db.trace.db
+!/.gitignore
+/codox
