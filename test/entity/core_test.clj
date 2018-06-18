@@ -5,7 +5,8 @@
             [entity.sql.hug :as sql]
             [typeops.assign :as typeops]
             [clojure.java.io :as io]
-            [clojure.java.jdbc :as jdbc])
+            [clojure.java.jdbc :as jdbc]
+            [clojure.spec.alpha :as s])
   (:import (java.text SimpleDateFormat)))
 
 (def now (java.sql.Timestamp. 0))
@@ -23,12 +24,18 @@
 (def fruit-db-opts {:entity-opts
                     {:server-type :h2}})
 
+; specs for use when defining scalar types
+(s/def ::non-empty-string (s/and string? not-empty))
+(s/def ::positive pos?)
+(s/def ::ge-zero #(>= % 0))
+
+
 ; Scalar types
-(defscalar :foo/StringId "")
-(defscalar :foo/NumDays 0)
-(defscalar :foo/LongVal 0)
-(defscalar :foo/LongName "")
-(defscalar :foo/Money 0.00M)
+(defscalar :foo/StringId "" :spec ::non-empty-string)
+(defscalar :foo/NumDays 0 :spec ::positive)
+(defscalar :foo/LongVal 0 :spec ::ge-zero)
+(defscalar :foo/LongName "" :spec ::non-empty-string)
+(defscalar :foo/Money 0.00M :spec ::ge-zero)
 (defscalar :foo/Date now)
 (defscalar :foo/DateTime now)
 (defscalar :foo/AddressLine "")
@@ -68,7 +75,8 @@
            :mutate (fn [old new] (comment stuff))
            :join (fn [instance] (comment stuff))
            :destroy (fn [instance] (comment stuff))
-           :alias :Fruit)
+           :alias :Fruit
+           :spec-name ::good-Fruit)
 
 (defentity :foo/Nutrition
            [Fruit       :foo/StringId

@@ -4,7 +4,8 @@
   entity.core
   (:require [clojure.string :as s]
             #?(:clj [typeops.assign :as t])
-            [entity.protocol :refer [IO read-key write-val delete-val]]))
+            [entity.protocol :refer [IO read-key write-val delete-val]]
+            [clojure.spec.alpha :as spec]))
 
 (deftype ^:no-doc NullIO []
   IO
@@ -30,6 +31,10 @@
   (-> (meta enum)
       :enum?))
 
+(defn- scalar?
+  [scalar]
+  (:scalar? scalar))
+
 (defn- default-enum-val
   "Return the default value for the given domain enum map"
   [enum]
@@ -39,19 +44,44 @@
       :default
       enum))
 
-;TODO: We can't refer to Type.Field at the moment. Is this especially useful?
 (defn- resolve-ref
-  "If the argument is a keyword, assume it is a reference to a type, look
-  it up and return the mapping. Otherwise just return the argument"
+  "If the argument is a keyword, assume it is a reference to an enum or
+  scalar, look it up and return its value. Otherwise just return the argument"
   [arg]
   (if (keyword? arg)
     (let [v (arg @types)]
       (if (nil? v)
         (throw (ex-info "Unresolved reference" {:arg arg})))
-      (if (enum? v)
+      (cond
+        (enum? v)
         (default-enum-val v)
-        v))
+
+        (scalar? v)
+        (:val v)
+
+        :else
+        (throw (ex-info "Not an enum or scalar reference" {:arg arg}))))
     arg))
+
+(defn- resolve-spec
+  "If the argument is a keyword, assume it is a reference to an enum or scalar.
+  Look it up and return any associated spec. Otherwise return nil"
+  [arg]
+  (if (keyword? arg)
+    (let [v (arg @types)]
+      (if (nil? v)
+        (throw (ex-info "Unresolved reference" {:arg arg})))
+      (cond
+        (enum? v)
+        (-> (meta v)
+            :spec)
+
+        (scalar? v)
+        (:spec v)
+
+        :else
+        (throw (ex-info "Not an enum or scalar reference" {:arg arg}))))
+     nil))
 
 (defn- make-enum
   [symvals default]
@@ -70,21 +100,21 @@
     (throw (ex-info "Not a name-spaced keyword" {:name arg}))))
 ; todo called from macros means ex-info is not evaluated. Any others?
 
-; Not necessary this is a macro, but leaves open future expansion if we
-; make it so, for example rendering width hints or what-have-you.
-(defmacro defscalar
+(defn defscalar
   "Define a scalar type, for example:
 
     (defscalar :foo/Money 0.00M
 
   defines the type :foo/Money as a big decimal with 2 decimal
   places of accuracy."
-  [name val]
+  [name val & args]
   (namespaced? name)
-  (let [v (resolve-ref val)]
-    `(do
-       (swap! types assoc ~name ~v)
-       ~name)))
+  (let [v (resolve-ref val)
+        s (resolve-spec val)
+        {:keys [spec]} args]
+    (do
+       (swap! types assoc name {:scalar? true :val v :spec (or spec s)})
+       name)))
 
 ; Make an enum type. Symbolic access to enum vals using a keyword.
 ; Meta data contains reverse mapping and default symbol
@@ -98,33 +128,47 @@
   corresponding values, and whose default is :y"
   [name symsvals default]
   (namespaced? name)
-  `(let [default# ~default
-         syms# ~symsvals
-         meta# (reduce-kv
-                 (fn [~'m ~'k ~'v]
-                   (assoc ~'m ~'v ~'k))
-                 {:enum?   true
-                  :default default#}
-                 syms#)]
-     (assert (contains? syms# default#) "Default value not valid")
-     (swap! types assoc ~name (with-meta syms# meta#))
-     ~name))
+  (let [spec-name (keyword
+                    (str *ns*)
+                    (clojure.core/name name))]
+    `(let [default# ~default
+           syms# ~symsvals
+           meta# (reduce-kv
+                   (fn [~'m ~'k ~'v]
+                     (assoc ~'m ~'v ~'k))
+                   {:enum?   true
+                    :default default#
+                    :spec (spec/def ~spec-name
+                            (into #{} (vals syms#)))}
+
+                   syms#)]
+       (assert (contains? syms# default#) "Default value not valid")
+       (swap! types assoc ~name (with-meta syms# meta#))
+       ~name)))
+
+(defn- find-enum
+  [enum]
+  (let [enum (enum @types)]
+    (if-not (enum? enum)
+      (throw (ex-info (str "Not an enum") {:enum (or enum "nil")})))
+    enum))
 
 (defn enum-val
   "Return the value for the given domain enum type and symbol"
   [enum sym]
-  (let [enum (enum @types)]
-    (if-not (enum? enum)
-      (throw (ex-info (str "Not an enum") {:enum (or enum "nil")})))
+  (let [enum (find-enum enum)]
     (or (sym enum)
         (throw (ex-info (str "Unknown enum symbol") {:sym sym})))))
+
+(defn enum-vals
+  "Return the values for a domain enum as a set"
+  [enum]
+  (set (vals (find-enum enum))))
 
 (defn enum-sym
   "Return the symbol for a given domain enum type and value"
   [enum val]
-  (let [enum (enum @types)]
-    (if-not (enum? enum)
-      (throw (ex-info (str "Not an enum") {:enum (or enum "nil")})))
+  (let [enum (find-enum enum)]
     (or (-> (meta enum)
             (get val))
         (throw (ex-info (str "Unknown enum value") {:val val})))))
@@ -189,7 +233,8 @@
   (loop [fields fields
          proto {}
          type-proto {}
-         field-names []]
+         field-names []
+         specs {}]
     (if (seq fields)
       (let [[w x y z] fields]
         (cond
@@ -197,16 +242,19 @@
           (recur (drop 4 fields)
                  (assoc proto (keyword w) (resolve-ref z))
                  (assoc type-proto (keyword w) (resolve-ref x))
-                 (conj field-names w))
+                 (conj field-names w)
+                 (assoc specs (keyword (str *ns*) (str w)) (resolve-spec x)))
           :else
           (let [val (resolve-ref x)]
             (recur (drop 2 fields)                          ; field type|expr
                    (assoc proto (keyword w) val)
                    (assoc type-proto (keyword w) val)
-                   (conj field-names w)))))
+                   (conj field-names w)
+                   (assoc specs (keyword (str *ns*) (str w)) (resolve-spec x))))))
       {:proto       proto
        :field-names field-names
-       :type-proto  type-proto})))
+       :type-proto  type-proto
+       :specs       specs})))
 
 (defn- ensure-fn
   [f]
@@ -263,7 +311,7 @@
                     (= :destroy k))
                 (recur (drop 2 extras)
                        (assoc result k (ensure-fn v)))
-                (= :alias k)
+                (#{:alias :spec-name} k)
                 (recur (drop 2 extras)
                        (assoc result k (ensure-keyword v)))
                 :else
@@ -273,43 +321,61 @@
       (assoc result :keys primary-key-info)
       result)))
 
+(defn ^:no-doc gen-specs
+  "Create specs for fields from any picked up from type references"
+  [specs]
+  (loop [this-spec (first specs)
+         rem-specs (next specs)
+         spec-defs '()]
+    (if this-spec
+      (let [[spec-name ref-spec] this-spec]
+        (recur (first rem-specs)
+               (next rem-specs)
+               (if ref-spec
+                 `((spec/def ~spec-name ~ref-spec) ~@spec-defs)
+                 spec-defs)))
+      spec-defs)))
+
 (defmacro defentity [ent-name fields primary & more]
   (do
     (if-not (and (keyword? ent-name) (namespace ent-name))
       (throw (ex-info "name must be name-spaced keyword" {:name ent-name})))
-    ;(if-not (and (vector? fields) (seq fields) (even? (count fields)))
-    ;  (throw (ex-info "fields must be a vector of name/value pairs" {:fields fields})))
     (if-not (and (vector? primary) (seq primary))
       (throw (ex-info "primary key not a vector or empty" {:primary primary})))
-    (let [proto-info# (fields-proto fields)
-          fields# (:field-names proto-info#)
-          rec-name# (name ent-name)]
-      (if-not (every? (set fields#) primary)
+    (let [proto-info (fields-proto fields)
+          fields (:field-names proto-info)
+          ref-specs (:specs proto-info)
+          specs (gen-specs ref-specs)
+          rec-name (name ent-name)]
+      (if-not (every? (set fields) primary)
         (throw (ex-info "primary fields not in declared fields" {:primary primary
-                                                                 :fields  fields#})))
-      (let [proto# (:proto proto-info#)
-            type-proto# (:type-proto proto-info#)
-            extras# (parse-extras proto# primary more)]
+                                                                 :fields  fields})))
+      (let [proto (:proto proto-info)
+            type-proto (:type-proto proto-info)
+            extras (parse-extras proto primary more)
+            spec-name (get extras :spec-name (keyword (str *ns*)  (str "valid-" rec-name)))]
         `(do
-           (defrecord ~(symbol rec-name#) ~fields#)
+           (defrecord ~(symbol rec-name) ~fields)
            (swap! types assoc
                   ~ent-name
                   (with-meta
                     {:name       ~ent-name
-                     :ctor       (eval (symbol (str "->" ~rec-name#))) ;ctor eg ->Currency
-                     :map-ctor   (eval (symbol (str "map->" ~rec-name#))) ;from a map eg map->Currency
-                     :proto      ((resolve (symbol (str "map->" ~rec-name#))) ~proto#) ;exemplar
-                     :type-proto ~type-proto#
+                     :ctor       ~(symbol (str "->" rec-name)) ;ctor eg ->Currency
+                     :map-ctor   ~(symbol (str "map->" rec-name)) ;from a map eg map->Currency
+                     :proto      ((resolve (symbol (str "map->" ~rec-name))) ~proto) ;exemplar
+                     :type-proto ~type-proto
                      :primary    (vec (map keyword '~primary))
-                     :extras     ~extras#}
+                     :extras     ~extras}
                     {:type? true}))
-
-
-
-           ~(symbol rec-name#))))))
+           ~@specs
+           (spec/def ~spec-name
+             (spec/and #(instance? ~(symbol rec-name) %)
+                       (spec/keys :req-un ~(vec (keys ref-specs)))))
+           ~(symbol rec-name))))))
 
 (defn find-entity
-  "Find the type from the given keyword ref"
+  "Return the type from the given keyword ref, or if the type itself, the argument.
+  Cannot refer to an enum or scalar."
   [entity]
   (if (nil? entity)
     (throw (ex-info "entity cannot be nil" {})))
@@ -329,7 +395,7 @@
     1) a value from the entity prototype
     2) a value from the referenced entity prototype
   A value of nil is allowed ... (does this make sense?)"    ; TODO <--
-  [key-field type-proto dep]
+  [type-proto dep]
   (let [{:keys [type field]} dep
         proto (if (= :this type)
                 type-proto
@@ -354,7 +420,6 @@
                  :deps)
         key-proto (reduce
                     #(let [v (find-field-value
-                               %2
                                type-proto
                                (%2 deps))]
                        (if (= v :nil)
