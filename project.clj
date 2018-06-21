@@ -1,10 +1,9 @@
-(defproject entity/entity-core "0.1.0"
+(defproject entity/entity-core "0.1.1"
   :description "A library to define domain types"
   :url "https://github.com/inqwell/entity-core"
   :license {:name "Eclipse Public License"
             :url  "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.8.0"]
-
                  [typeops "0.1.1"]
                  [com.rpl/specter "1.0.2"]]
   :plugins [[lein-codox "0.10.3"]]

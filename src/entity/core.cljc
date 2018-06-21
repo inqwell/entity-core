@@ -40,7 +40,7 @@
       enum))
 
 ;TODO: We can't refer to Type.Field at the moment. Is this especially useful?
-(defn- resolve-ref
+(defn ^:no-doc resolve-ref
   "If the argument is a keyword, assume it is a reference to a type, look
   it up and return the mapping. Otherwise just return the argument"
   [arg]
@@ -195,11 +195,11 @@
         (cond
           (= '= y)                                          ; field type = value
           (recur (drop 4 fields)
-                 (assoc proto (keyword w) (resolve-ref z))
-                 (assoc type-proto (keyword w) (resolve-ref x))
+                 (assoc proto (keyword w) `(resolve-ref ~z))
+                 (assoc type-proto (keyword w) `(resolve-ref ~x))
                  (conj field-names w))
           :else
-          (let [val (resolve-ref x)]
+          (let [val `(resolve-ref ~x)]
             (recur (drop 2 fields)                          ; field type|expr
                    (assoc proto (keyword w) val)
                    (assoc type-proto (keyword w) val)
