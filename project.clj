@@ -1,4 +1,4 @@
-(defproject entity/entity-core "0.1.1"
+(defproject entity/entity-core "0.1.2"
   :description "A library to define domain types"
   :url "https://github.com/inqwell/entity-core"
   :license {:name "Eclipse Public License"

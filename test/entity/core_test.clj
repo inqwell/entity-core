@@ -44,8 +44,8 @@
            [Fruit          :foo/StringId
             Description    :foo/LongName
             ShelfLife      :foo/NumDays = 1
-            Active         (enum-val :foo/Active :y)
-            Freezable      (enum-val :foo/Freezable :n)]
+            Active         :foo/Active
+            Freezable      :foo/Freezable = (enum-val :foo/Freezable :n)]
            [Fruit]
            :keys {:all         {:unique? false
                                 :cached? false

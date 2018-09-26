@@ -110,7 +110,7 @@
      (swap! types assoc ~name (with-meta syms# meta#))
      ~name))
 
-(defn enum-val
+(defn- enum-val-impl
   "Return the value for the given domain enum type and symbol"
   [enum sym]
   (let [enum (enum @types)]
@@ -119,7 +119,17 @@
     (or (sym enum)
         (throw (ex-info (str "Unknown enum symbol") {:sym sym})))))
 
-(defn enum-sym
+(defn enum-val-fn
+  "Return the value for the given domain enum type and symbol"
+  [enum sym]
+  (enum-val-impl enum sym))
+
+(defmacro enum-val
+  "Return the value for the given domain enum type and symbol"
+  [enum sym]
+  (enum-val-impl enum sym))
+
+(defmacro enum-sym
   "Return the symbol for a given domain enum type and value"
   [enum val]
   (let [enum (enum @types)]
