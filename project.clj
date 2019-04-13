@@ -4,7 +4,7 @@
   :license {:name "Eclipse Public License"
             :url  "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.8.0"]
-                 [typeops "0.1.1"]
+                 [typeops "0.1.2"]
                  [com.rpl/specter "1.0.2"]]
   :plugins [[lein-codox "0.10.3"]]
   :codox {:output-path "codox/entity-core"

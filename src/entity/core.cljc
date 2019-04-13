@@ -283,7 +283,9 @@
       (assoc result :keys primary-key-info)
       result)))
 
-(defmacro defentity [ent-name fields primary & more]
+(defmacro defentity
+  "Define a record type with fields, keys and any additional information"
+  [ent-name fields primary & more]
   (do
     (if-not (and (keyword? ent-name) (namespace ent-name))
       (throw (ex-info "name must be name-spaced keyword" {:name ent-name})))
@@ -308,7 +310,7 @@
                     {:name       ~ent-name
                      :ctor       (eval (symbol (str "->" ~rec-name#))) ;ctor eg ->Currency
                      :map-ctor   (eval (symbol (str "map->" ~rec-name#))) ;from a map eg map->Currency
-                     :proto      ((resolve (symbol (str "map->" ~rec-name#))) ~proto#) ;exemplar
+                     :proto      ((resolve (symbol (str "map->" ~rec-name#))) (t/merge ~type-proto# ~proto#)) ;exemplar
                      :type-proto ~type-proto#
                      :primary    (vec (map keyword '~primary))
                      :extras     ~extras#}
@@ -332,6 +334,18 @@
                 :type?)
       (throw (ex-info "Not a type or unknown" {:entity entity}))
       l-entity)))
+
+(defn find-value
+  "Find a value from the types catalog. Two args means type:field.
+  Single arg means scalar."
+  ([scalar] (find-value nil scalar))
+  ([entity field]
+   (let [type-info (if entity
+                     (-> (entity @types)
+                         :proto
+                         field)
+                     (field @types))]
+     type-info)))
 
 (defn- find-field-value
   "Look for the specified key field's typed value. This will
@@ -428,18 +442,35 @@
 
 ; TODO: consider find-entity viability
 (defn- get-entity-def
+  "Return the defnition of the given entity. The argument can be
+   - keyword eg :foo/Fruit returns the definition of :foo/Fruit
+   - already the defintion itself, returns the argument
+   - an instance of the entity (from which the defintion can be found)"
   [instance]
   (cond
     (keyword? instance) (find-entity instance)
     (and (:type? (meta instance)) (:proto instance)) instance
     :else (find-entity (:entity (meta instance)))))
 
-(defn is-key-val
+(defn key-val?
   "Returns true if the argument appears to be a value returned
   by make-key"
-  [val]
-  (let [{:keys [entity key-name proto]} (meta val)]
+  [arg]
+  (let [{:keys [entity key-name proto]} (meta arg)]
     (and entity key-name proto true)))
+
+(defn entity-instance?
+  "Returns true if the argument is an instance of the given entity. The
+  entity can be a keyword (a literal referral to the domain type) or
+  an instance (from which the type will be determined).
+  If arg is not an instance of entity, returns false."
+  [arg entity]
+  (and (keyword? arg) (throw (ex-info "arg cannot be a keyword" {})))
+  (= (-> (meta arg)
+         :entity)
+     (-> (get-entity-def entity)
+         :name)))
+
 
 (defn make-key
   "Make a key value. Returns a map comprising only the map keys
