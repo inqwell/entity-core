@@ -13,7 +13,7 @@ and transactions
 
 ## Usage
 
-`[entity/entity-core "0.1.0"]`
+`[entity/entity-core "0.1.2"]`
 
 ## License
 
