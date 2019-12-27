@@ -290,9 +290,9 @@
   (write-instance pineapple-nutrition)
   (is (= Fruit
          (type (read-entity (make-key
+                              {:Fruit "Strawberry"}
                               :foo/Fruit
-                              :primary
-                              {:Fruit "Strawberry"}))))))
+                              :primary))))))
 
 (deftest read-multi
   (create-fruits-table)
@@ -300,16 +300,16 @@
   (write-instance banana)
   (is (= #{banana strawberry}
          (into #{} (read-entity (make-key
+                                  {}
                                   :foo/Fruit
-                                  :all
-                                  {}))))))
+                                  :all))))))
 
 (deftest write
   (create-fruits-table)
   (write-instance strawberry)
   (let [mod-strawb (typeops/assign strawberry :ShelfLife 18)
         write-res (write-instance mod-strawb)
-        read-strawb (read-entity (make-key :foo/Fruit :primary strawberry))]
+        read-strawb (read-entity (make-key strawberry :foo/Fruit :primary))]
     (is (= 1 write-res))
     (is (= mod-strawb read-strawb))))
 
@@ -317,7 +317,7 @@
   (create-fruits-table)
   (let [write-res (write-instance strawberry)
         delete-res (delete-instance strawberry)
-        read-strawb (read-entity (make-key :foo/Fruit :primary strawberry))]
+        read-strawb (read-entity (make-key strawberry :foo/Fruit :primary))]
     (is (= 1 write-res))
     (is (= 1 delete-res))
     (is (nil? read-strawb))))
@@ -337,7 +337,7 @@
     (catch Exception _))
 
   (is
-    (= strawberry (read-entity (make-key :foo/Fruit :primary strawberry)))))
+    (= strawberry (read-entity (make-key strawberry :foo/Fruit :primary)))))
 
 (deftest filter-key-test
   (is (do
@@ -352,17 +352,17 @@
         (doall (map #(write-instance %1) fruit-supplier-mappings))
       (= #{strawberries-from-kent strawberries-from-sussex}
          (into #{} (read-entity (make-key
-                        :foo/FruitSupplier
-                        :filter
-                        {:Fruit          nil,
-                         :Supplier       nil ;"Kent Fruits",
-                         :FruitActive    nil,
-                         :Freezable      nil,
-                         :MinShelfLife   7,
-                         :MaxShelfLife   20,
-                         :SupplierActive nil,
-                         :FromDate       nil,
-                         :ToDate         nil})))))))
+                                  {:Fruit          nil,
+                                   :Supplier       nil      ;"Kent Fruits",
+                                   :FruitActive    nil,
+                                   :Freezable      nil,
+                                   :MinShelfLife   7,
+                                   :MaxShelfLife   20,
+                                   :SupplierActive nil,
+                                   :FromDate       nil,
+                                   :ToDate         nil}
+                                  :foo/FruitSupplier
+                                  :filter)))))))
 
 (deftest aggregate-primary-test
   (create-fruits-table)
@@ -421,7 +421,7 @@
                    {:Fruit banana,
                     :Nutrition banana-nutrition}]}
                    (-> {}
-                       (aggregate :set-name :fruits :to :foo/Fruit :key-val (make-key :foo/Fruit :filter {}))
+                       (aggregate :set-name :fruits :to :foo/Fruit :key-val (make-key {} :foo/Fruit :filter))
                        (aggregate :from [:fruits > :Fruit] :to :foo/Nutrition :must-join true)))))
 
 (deftest aggregate-merge-extra-test
@@ -439,8 +439,8 @@
                    {:Fruit pineapple}
                    ]}
          (-> {}
-             (aggregate :set-name :fruits :to :foo/Fruit :key-val (make-key :foo/Fruit :filter {:FruitActive 0}))
-             (aggregate :merge :primary :set-name :fruits :to :foo/Fruit :key-val (make-key :foo/Fruit :filter {:FruitActive 1}))
+             (aggregate :set-name :fruits :to :foo/Fruit :key-val (make-key {:FruitActive 0} :foo/Fruit :filter))
+             (aggregate :merge :primary :set-name :fruits :to :foo/Fruit :key-val (make-key {:FruitActive 1} :foo/Fruit :filter))
              )))
   (is (= {:Fruit strawberry,
          :suppliers [{:Supplier kent-fruits,

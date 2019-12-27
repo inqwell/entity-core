@@ -159,12 +159,12 @@ with other domain data types should be expressed by associating related
 instance(s) via their position in a dynamically constructed data graph.
 
 By default, key field values are nil. `typeops` is used to enforce
-the correct types for field values set its definition of `assoc`.
+the correct types for field values with its definition of `assoc`.
 ```clojure
 (make-key
+    {}
     :foo/FruitSupplier
-    :filter
-    {})
+    :filter)
 =>
 {:ToDate nil,
  :MaxShelfLife nil,

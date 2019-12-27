@@ -190,24 +190,24 @@
           (let [l-key-val
                 (cond
                   (nil? key-val)
-                  (make-key to :primary from)
+                  (make-key from to :primary)
 
                   (keyword? key-val)
-                  (make-key to key-val from)
+                  (make-key from to key-val)
 
                   (vector? key-val)
                   (let [[key-name key-val] key-val]
-                    (make-key to key-name key-val))
+                    (make-key key-val to key-name))
 
                   (key-value? key-val)
                   (let [key-meta (meta key-val)]
                     (if (= to
                            (:entity key-meta))
                       key-val
-                      (make-key to key-name key-val)))
+                      (make-key key-val to key-name)))
 
                   (map? key-val)
-                  (make-key to key-name key-val)
+                  (make-key key-val to key-name)
 
                   (fn? key-val)
                   (key-val parent from f-opts)

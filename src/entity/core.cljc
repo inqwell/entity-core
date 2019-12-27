@@ -337,7 +337,8 @@
 
 (defn find-value
   "Find a value from the types catalog. Two args means type:field.
-  Single arg means scalar."
+  Single arg means scalar. If type:field does not resolve then field is
+  considered a key name, returning the key proto if found."
   ([scalar] (find-value nil scalar))
   ([entity field]
    (let [type-info (if entity
@@ -477,7 +478,7 @@
   for the given domain key name. Any missing fields are
   nil (or explicit default value); additional
   fields are ignored."
-  [entity key-name key-val]
+  [key-val entity key-name]
   (if (nil? key-val)
     (throw (ex-info "key-val cannot be nil" {})))
   (let [entity (find-entity entity)
@@ -501,9 +502,9 @@
       #(assoc %1
          :primary
          (make-key
+           instance
            (:entity cur-meta)
-           :primary
-           instance)))))
+           :primary)))))
 
 (defn get-alias
   "Return a keyword that can be used to associate the
