@@ -282,3 +282,6 @@ the parent node and must return the new child.
 The `entity-sql` library implements `core`'s `IO` protocol and provides
 the `bind-connection` macro to bind entities to SQL databases.
 
+## Usage
+
+`[entity/entity-core "0.1.2"]`
