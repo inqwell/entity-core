@@ -6,7 +6,7 @@
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [typeops "0.1.2"]
                  [com.rpl/specter "1.0.2"]]
-  :plugins [[lein-codox "0.10.3"]]
+  :plugins [[lein-codox "0.10.7"]]
   :codox {:output-path "codox/entity-core"
           :source-uri "https://github.com/inqwell/entity-core/blob/master/{filepath}#L{line}"}
   :profiles {:dev            {:dependencies [[com.h2database/h2 "1.4.195"]
